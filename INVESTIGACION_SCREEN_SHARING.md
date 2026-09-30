@@ -1,24 +1,31 @@
 # Reto de investigación: ver la pantalla del cliente desde un enlace, sin app
 
-**Qué es posible.** Solo en desktop. Un enlace web puede pedir permiso y ver la pantalla completa con la API getDisplayMedia y WebRTC (Chrome, Edge, Firefox, Safari en Mac).
+**Respuesta corta.** Desde un enlace, sin instalar nada, ver toda la pantalla del cliente solo funciona en computador. En celular (iPhone y Android) no se puede, y no es por falta de desarrollo: Apple y Google no dejan que una página web vea lo que pasa en otras apps. Eso solo lo puede hacer una app instalada.
 
-**Qué no es posible y por qué.** En iPhone y Android ningún navegador tiene getDisplayMedia (caniuse: sin soporte en Safari iOS, Chrome Android, Samsung Internet, Firefox Android). Capturar todo el teléfono requiere una app instalada: en Android la API MediaProjection con un servicio en primer plano, en iOS ReplayKit con un Broadcast Extension. Es una decisión de privacidad de Apple y Google, no un pendiente técnico. Una PWA tampoco sirve, corre dentro del mismo navegador.
+**Qué sí se puede.**
+- En computador: el cliente abre el enlace, el navegador le pregunta si quiere compartir pantalla, acepta, y el agente ve todo. Esto es lo que piden y funciona hoy con tecnología estándar (WebRTC).
+- En celular, dentro de nuestras propias páginas: sí podemos ver lo que el cliente ve y guiarlo, por ejemplo cuando está subiendo documentos o llenando la solicitud. Se logra con un pequeño código en nuestra página que le muestra al agente una copia en vivo de lo que el cliente tiene en pantalla. No pide permiso de pantalla porque no graba la pantalla, solo replica nuestra página. Funciona en iPhone y Android, y podemos tapar datos delicados como el seguro social.
 
-**Diferencias.** Desktop: todo por web. Android e iPhone: sin app, solo se puede ver al cliente dentro de nuestro propio sitio. iPhone además tiene FaceTime con compartir pantalla, pero ambos deben usar FaceTime.
+**Qué no se puede.** En celular, ver otras apps o sitios que no son nuestros (su correo, su banco, la galería de fotos) desde un enlace. Ningún navegador de celular lo permite. Lo comprobé en la tabla de compatibilidad de caniuse y en la documentación de Apple y Android: la función existe solo para apps instaladas.
 
-**Qué construiría.** Un solo enlace que detecta el dispositivo y ofrece lo mejor disponible:
-1. Desktop: pantalla completa por web, exactamente lo pedido.
-2. Móvil dentro de nuestro sitio: co-browsing. Un snippet de JavaScript replica la página del cliente al agente en tiempo real (rrweb o Cobrowse.io). No pide permiso de pantalla porque no captura pantalla. Funciona en Safari iOS y Chrome Android, y permite ocultar SSN y datos sensibles. Cubre el caso principal: guiar al cliente cuando se traba subiendo documentos o llenando la solicitud.
-3. Móvil fuera de nuestro sitio: botón "te llamo por WhatsApp". En la videollamada el cliente comparte su pantalla completa, en iPhone y Android, cifrado de extremo a extremo. Para clientes hispanos WhatsApp ya está instalado, así que en la práctica no se instala nada.
-4. Siempre: el agente comparte su pantalla al cliente ("mira, este botón"). Funciona en cualquier teléfono.
+**Diferencia entre plataformas, en corto.**
+- Computador: todo por el enlace.
+- Android: por el enlace, solo dentro de nuestras páginas.
+- iPhone: igual que Android. Además tiene FaceTime con compartir pantalla, pero los dos deben tener iPhone.
 
-En todos los casos: consentimiento claro, indicador visible de que el agente está viendo, y botón de detener a la vista.
+**Qué construiría.** Un solo enlace que detecta desde dónde lo abren y da la mejor opción:
+1. Si es computador: compartir pantalla completa. Exactamente lo pedido.
+2. Si es celular y el problema está en nuestra página: el agente ve una copia en vivo y le va señalando dónde tocar.
+3. Si es celular y necesita ayuda en otra app: un botón "te llamo por WhatsApp". En la videollamada de WhatsApp el cliente puede compartir su pantalla completa, en iPhone y Android. Como casi todos nuestros clientes ya tienen WhatsApp, en la práctica no instalan nada.
+4. Siempre disponible: el agente comparte su pantalla al cliente y le dice "mira, este botón". Funciona en cualquier celular.
+
+En todos los casos el cliente debe aceptar de forma clara, ver un aviso mientras lo estamos viendo, y poder detenerlo con un botón.
 
 **Fuentes.**
-- caniuse, getDisplayMedia: https://caniuse.com/mdn-api_mediadevices_getdisplaymedia
-- MDN, getDisplayMedia: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia
-- Android, Media projection: https://developer.android.com/media/grow/media-projection
-- iOS, ReplayKit y Broadcast Extension: https://github.com/livekit/client-sdk-swift/blob/main/Docs/ios-screen-sharing.md
-- Cobrowse.io, sin captura completa en navegadores móviles: https://docs.cobrowse.io/sdk-features/full-device-capabilities/full-device-screen-sharing
-- WhatsApp, compartir pantalla: https://faq.whatsapp.com/1339237313658883
+- Tabla de compatibilidad de compartir pantalla en navegadores (caniuse): https://caniuse.com/mdn-api_mediadevices_getdisplaymedia
+- Documentación de la función en navegadores (MDN): https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia
+- Android, captura de pantalla solo desde apps: https://developer.android.com/media/grow/media-projection
+- iPhone, captura de pantalla solo desde apps (ReplayKit): https://github.com/livekit/client-sdk-swift/blob/main/Docs/ios-screen-sharing.md
+- Cobrowse.io, confirma que en navegadores de celular no se puede ver el dispositivo completo: https://docs.cobrowse.io/sdk-features/full-device-capabilities/full-device-screen-sharing
+- WhatsApp, cómo compartir pantalla: https://faq.whatsapp.com/1339237313658883
 - Apple, compartir pantalla en FaceTime: https://support.apple.com/guide/iphone/share-your-screen-in-a-facetime-call-iph327b4b53c/ios
