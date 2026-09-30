@@ -28,4 +28,5 @@ En todos los casos el cliente debe aceptar de forma clara, ver un aviso mientras
 - iPhone, captura de pantalla solo desde apps (ReplayKit): https://github.com/livekit/client-sdk-swift/blob/main/Docs/ios-screen-sharing.md
 - Cobrowse.io, confirma que en navegadores de celular no se puede ver el dispositivo completo: https://docs.cobrowse.io/sdk-features/full-device-capabilities/full-device-screen-sharing
 - WhatsApp, cómo compartir pantalla: https://faq.whatsapp.com/1339237313658883
+- Android Authority, compartir pantalla en WhatsApp en Android e iPhone: https://www.androidauthority.com/how-to-screen-share-on-whatsapp-3333172/
 - Apple, compartir pantalla en FaceTime: https://support.apple.com/guide/iphone/share-your-screen-in-a-facetime-call-iph327b4b53c/ios
