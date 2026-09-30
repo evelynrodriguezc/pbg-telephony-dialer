@@ -32,7 +32,10 @@ function json(res, code, body) {
 function validSignature(raw, header) {
   if (!SECRET) return true;
   const expected = crypto.createHmac('sha256', SECRET).update(raw).digest('hex');
-  return header && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(header)));
+  const given = Buffer.from(String(header ?? ''));
+  // timingSafeEqual lanza si los largos difieren; comparar largo primero evita tumbar el proceso.
+  if (given.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), given);
 }
 
 const server = http.createServer((req, res) => {
