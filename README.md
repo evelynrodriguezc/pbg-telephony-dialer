@@ -10,7 +10,9 @@ No es un dialer completo. No hay UI, ni integración real con un proveedor (Twil
 |---|---|
 | `src/state.js` | Reducer puro: `(estado, evento) -> estado`. Aquí vive el modelo y las reglas. |
 | `src/store.js` | Log write-ahead (`events.jsonl`) + dedupe por clave + snapshot + recuperación al arrancar. |
-| `src/server.js` | HTTP sin dependencias: `POST /webhooks`, `POST /dial`, `GET /state`, `GET /health`. Firma HMAC opcional. |
+| `src/server.js` | HTTP sin dependencias: `POST /webhooks`, `POST /dial`, `GET /state`, `GET /health`, `GET /` (vista). Firma HMAC opcional. |
+| `src/ui.html` | Vista en vivo, un solo HTML sin framework: línea del agente arriba, piernas entrando y saliendo abajo, alertas. |
+| `scripts/feed.js` | Envía el feed al servidor por HTTP con pausa entre eventos, para verlo cambiar en la vista. |
 | `src/reputation.js` | Guardia de reputación: decide si se puede marcar desde una línea, sugiere una limpia, marca llamadas que salieron por línea quemada. |
 | `scripts/replay.js` | Alimenta `data/webhooks.jsonl` tal cual llega, simula el reinicio y reenvía todo el feed. |
 | `test/state.test.js` | 10 pruebas: identidades, duplicados, desorden, fallo SIP, inbound durante outbound, lookup ambiguo, recuperación, guardia de reputación. |
@@ -21,7 +23,10 @@ No es un dialer completo. No hay UI, ni integración real con un proveedor (Twil
 npm test          # 10 pruebas con node:test, sin dependencias
 npm run replay    # procesa el feed del paquete y muestra el estado final
 npm start         # servidor en :3000 (PORT, DATA_DIR, WEBHOOK_SECRET opcionales)
+npm run feed      # en otra terminal: manda el feed al servidor, evento por evento
 ```
+
+Con `npm start` y `npm run feed` corriendo, abre http://localhost:3000 y verás la línea del agente mantenerse activa mientras los clientes entran y salen. Cuando el feed llega a `process.restart` hace una pausa: mata el servidor y vuelve a levantarlo; el estado vuelve igual.
 
 Ejemplo contra el servidor:
 

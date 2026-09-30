@@ -1,6 +1,7 @@
 /**
  * HTTP mínimo (sin dependencias).
  *   POST /webhooks  -> valida, persiste, responde 200 rápido. Body: evento JSON.
+ *   GET  /          -> vista HTML del estado (línea del agente + piernas).
  *   GET  /state     -> estado completo (agentes, piernas, contadores, advertencias).
  *   GET  /health    -> ok + lastSeq.
  *   POST /dial      -> { agentId, to }: decide si se puede marcar desde la línea
@@ -13,6 +14,8 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { EventStore } from './store.js';
 import { loadReputation, lineWarnings, dialDecision } from './reputation.js';
 
@@ -38,7 +41,13 @@ function validSignature(raw, header) {
   return crypto.timingSafeEqual(Buffer.from(expected), given);
 }
 
+const UI = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui.html'));
+
 const server = http.createServer((req, res) => {
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end(UI);
+  }
   if (req.method === 'GET' && req.url === '/health') {
     return json(res, 200, { ok: true, lastSeq: store.state.lastSeq });
   }
