@@ -40,6 +40,8 @@ Si matas el proceso y lo vuelves a levantar con el mismo `DATA_DIR`, el estado v
 
 ## Modelo de estado
 
+Vocabulario: en telefonía una llamada entre agente y cliente son dos **legs** (piernas o tramos) que el proveedor une: uno hacia el agente y otro hacia el cliente. El feed del paquete usa `agent_leg` y `client_leg`. Aquí "pierna" = leg.
+
 Tres identidades separadas, nunca mezcladas:
 
 - **Agente** (`agents[A-*]`): la línea del agente. Tiene su número saliente (`line`), estado `active/ended`, la pierna con la que está hablando ahora (`currentLegId`) y el historial de piernas. Sigue `active` aunque los clientes cuelguen.

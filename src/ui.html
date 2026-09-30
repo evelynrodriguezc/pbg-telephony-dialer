@@ -74,7 +74,7 @@ function render(s) {
     </div>`;
     if (w) html += `<div class="warnbox">⚠ Línea ${esc(w.line)} marcada <b>${esc(w.label)}</b> · ${w.calls24h} llamadas/24h · recomendada: <b>${esc(w.recommendedLine ?? 'ninguna limpia')}</b><br><span style="opacity:.8">${esc(w.advice)}</span></div>`;
   }
-  html += `<table><thead><tr><th>Pierna</th><th>Dirección</th><th>Cliente</th><th>Estado</th><th>Notas</th></tr></thead><tbody>`;
+  html += `<table><thead><tr><th>Llamada</th><th>Dirección</th><th>Cliente</th><th>Estado</th><th>Notas</th></tr></thead><tbody>`;
   if (legs.length === 0) html += '<tr><td colspan="5" class="empty">Todavía no hay clientes.</td></tr>';
   for (const l of legs) {
     const [cls, label] = STATUS[l.status] ?? ['muted', l.status];
