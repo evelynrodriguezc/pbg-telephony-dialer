@@ -11,7 +11,8 @@ import { loadReputation, lineWarnings } from '../src/reputation.js';
 const dir = path.resolve(process.env.DATA_DIR ?? 'runtime-replay');
 fs.rmSync(dir, { recursive: true, force: true });
 
-let store = new EventStore(dir, { snapshotEvery: 3 });
+const reputation = loadReputation(path.resolve('data/number_reputation.csv'));
+let store = new EventStore(dir, { snapshotEvery: 3, reputation });
 const lines = fs.readFileSync(path.resolve('data/webhooks.jsonl'), 'utf8').split('\n').filter(Boolean);
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -21,7 +22,7 @@ for (const line of lines) {
   if (ev.event === 'process.restart') {
     const before = JSON.stringify(store.state);
     store = null; // "muere" el proceso
-    const { store: reopened, report } = EventStore.open(dir, { snapshotEvery: 3 });
+    const { store: reopened, report } = EventStore.open(dir, { snapshotEvery: 3, reputation });
     store = reopened;
     const same = JSON.stringify(store.state) === before;
     console.log(pad(ev.seq, 4), pad('process.restart', 22), pad('-', 6), pad('-', 9), pad('-', 8),
@@ -29,7 +30,9 @@ for (const line of lines) {
     continue;
   }
   const r = store.ingest(ev);
-  console.log(pad(ev.seq, 4), pad(ev.event, 22), pad(ev.call_control_id ?? '-', 6), pad(r.accepted, 9), pad(r.applied, 8), r.reason);
+  const flag = store.state.legs[ev.call_control_id]?.reputationFlag;
+  const note = ev.event === 'client_leg.initiated' && flag ? `  [línea ${flag.line} quemada: ${flag.label}, ${flag.calls24h}/24h; usar ${flag.recommendedLine}]` : '';
+  console.log(pad(ev.seq, 4), pad(ev.event, 22), pad(ev.call_control_id ?? '-', 6), pad(r.accepted, 9), pad(r.applied, 8), r.reason + note);
 }
 
 // Segunda pasada: reenviar TODO el feed otra vez (reintentos del proveedor).
@@ -41,6 +44,5 @@ for (const line of lines) {
 }
 console.log(`\nReenvío completo del feed: ${dupes} eventos descartados por clave repetida, estado sin cambios.`);
 
-const reputation = loadReputation(path.resolve('data/number_reputation.csv'));
 console.log('\nESTADO FINAL');
 console.log(JSON.stringify({ ...store.state, warnings: lineWarnings(store.state, reputation) }, null, 2));

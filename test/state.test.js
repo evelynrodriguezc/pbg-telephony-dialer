@@ -78,3 +78,30 @@ test('store: clave repetida se descarta y el estado se recupera tras reinicio', 
   b.ingest(c1Hang);
   assert.equal(b.state.legs['C-1'].status, 'ended');
 });
+
+import { dialDecision, DAILY_LIMIT } from '../src/reputation.js';
+
+const reputation = new Map([
+  ['+15550000001', { calls24h: 86, complaints: 0, label: 'spam_likely' }],
+  ['+15550000002', { calls24h: 22, complaints: 0, label: 'clean' }],
+  ['+15550000003', { calls24h: 104, complaints: 0, label: 'spam_likely' }],
+]);
+
+test('guardia de reputación: no marcar desde línea quemada y sugerir la limpia', () => {
+  const bad = dialDecision('+15550000001', reputation);
+  assert.equal(bad.allowed, false);
+  assert.equal(bad.reason, 'line_labeled_spam');
+  assert.equal(bad.recommendedLine, '+15550000002');
+  const ok = dialDecision('+15550000002', reputation);
+  assert.equal(ok.allowed, true);
+  const limit = dialDecision('+15550000009', new Map([['+15550000009', { calls24h: DAILY_LIMIT, complaints: 0, label: 'clean' }]]));
+  assert.equal(limit.reason, 'daily_limit_reached');
+  assert.equal(limit.recommendedLine, null);
+});
+
+test('una llamada que salió por línea quemada queda marcada en la pierna', () => {
+  const s = [agentUp, c1Init].reduce((st, ev) => reduce(st, ev, { reputation }).state, initialState());
+  assert.equal(s.legs['C-1'].reputationFlag.label, 'spam_likely');
+  assert.equal(s.legs['C-1'].reputationFlag.recommendedLine, '+15550000002');
+  assert.equal(s.counters.dialsFromBurnedLine, 1);
+});

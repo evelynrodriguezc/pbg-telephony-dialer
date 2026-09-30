@@ -26,8 +26,9 @@ export function idempotencyKey(ev) {
 }
 
 export class EventStore {
-  constructor(dir, { snapshotEvery = 5 } = {}) {
+  constructor(dir, { snapshotEvery = 5, reputation = new Map() } = {}) {
     this.dir = dir;
+    this.ctx = { reputation };
     this.logPath = path.join(dir, 'events.jsonl');
     this.snapshotPath = path.join(dir, 'snapshot.json');
     this.snapshotEvery = snapshotEvery;
@@ -60,7 +61,7 @@ export class EventStore {
         const key = idempotencyKey(ev);
         if (this.seen.has(key)) { skipped += 1; continue; }
         this.seen.add(key);
-        this.state = reduce(this.state, ev).state;
+        this.state = reduce(this.state, ev, this.ctx).state;
         replayed += 1;
       }
     }
@@ -75,7 +76,7 @@ export class EventStore {
     // Write-ahead: persistir antes de mutar.
     fs.appendFileSync(this.logPath, JSON.stringify({ receivedAt: new Date().toISOString(), ev }) + '\n');
     this.seen.add(key);
-    const { state, applied, reason } = reduce(this.state, ev);
+    const { state, applied, reason } = reduce(this.state, ev, this.ctx);
     this.state = state;
     this.sinceSnapshot += 1;
     if (this.sinceSnapshot >= this.snapshotEvery) this.snapshot();

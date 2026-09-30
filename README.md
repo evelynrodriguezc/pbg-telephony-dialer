@@ -10,15 +10,15 @@ No es un dialer completo. No hay UI, ni integración real con un proveedor (Twil
 |---|---|
 | `src/state.js` | Reducer puro: `(estado, evento) -> estado`. Aquí vive el modelo y las reglas. |
 | `src/store.js` | Log write-ahead (`events.jsonl`) + dedupe por clave + snapshot + recuperación al arrancar. |
-| `src/server.js` | HTTP sin dependencias: `POST /webhooks`, `GET /state`, `GET /health`. Firma HMAC opcional. |
-| `src/reputation.js` | Cruza la línea del agente con `number_reputation.csv` y avisa si está marcada como spam. |
+| `src/server.js` | HTTP sin dependencias: `POST /webhooks`, `POST /dial`, `GET /state`, `GET /health`. Firma HMAC opcional. |
+| `src/reputation.js` | Guardia de reputación: decide si se puede marcar desde una línea, sugiere una limpia, marca llamadas que salieron por línea quemada. |
 | `scripts/replay.js` | Alimenta `data/webhooks.jsonl` tal cual llega, simula el reinicio y reenvía todo el feed. |
-| `test/state.test.js` | 8 pruebas: identidades, duplicados, desorden, fallo SIP, inbound durante outbound, lookup ambiguo, recuperación. |
+| `test/state.test.js` | 10 pruebas: identidades, duplicados, desorden, fallo SIP, inbound durante outbound, lookup ambiguo, recuperación, guardia de reputación. |
 
 ## Correr
 
 ```bash
-npm test          # 8 pruebas con node:test, sin dependencias
+npm test          # 10 pruebas con node:test, sin dependencias
 npm run replay    # procesa el feed del paquete y muestra el estado final
 npm start         # servidor en :3000 (PORT, DATA_DIR, WEBHOOK_SECRET opcionales)
 ```
@@ -53,7 +53,13 @@ Tres identidades separadas, nunca mezcladas:
 
 **Fallo SIP.** `sip.failure` cierra la pierna con `endReason: "sip_603"` y libera al agente igual que un hangup.
 
-**Reputación del número.** La línea del agente (+15550000001) aparece como `spam_likely` con 86 llamadas en 24h. `GET /state` devuelve `warnings` con esa alerta. No roto números automáticamente: el "number cycling" empeora la reputación del pool; lo correcto es bajar volumen, registrar el número (Free Caller Registry, STIR/SHAKEN atestación A) y rotar con criterio.
+**Reputación del número (por qué la gente no contesta).** La línea del agente (+15550000001) aparece como `spam_likely` con 86 llamadas en 24h. Eso lo deciden las operadoras y apps como Hiya; el código no lo puede "desmarcar". Lo que sí puede es dejar de empeorarlo:
+
+- `POST /dial { agentId, to }` decide **antes** de marcar. Si la línea está etiquetada spam, pasó el límite diario (`DAILY_LIMIT = 50`) o tiene quejas, responde 422 con `recommendedLine` (la línea limpia con menos volumen, aquí +15550000002). Si no hay línea limpia, no marca: seguir quemando el pool es peor.
+- Si igual llegó un `client_leg.initiated` por una línea quemada, la pierna queda con `reputationFlag` y sube el contador `dialsFromBurnedLine`. En el replay, C-101 y C-102 salen marcadas.
+- `GET /state` devuelve `warnings` por línea con la recomendación.
+
+Lo que falta y no es código: atestación STIR/SHAKEN A con el proveedor, registrar los números en Free Caller Registry, Branded Caller ID, y respetar ventana horaria y consentimiento (TCPA, DNC). Y no hacer "number cycling": rotar números en masa es el patrón de estafador y quema el pool completo.
 
 ## Supuestos
 

@@ -14,6 +14,8 @@
  *                 varios leads pueden compartir teléfono.
  */
 
+import { isBurned, recommendLine } from './reputation.js';
+
 export const RANK = { initiated: 1, ringing: 1, answered: 2, ended: 3 };
 
 export function initialState() {
@@ -21,7 +23,7 @@ export function initialState() {
     agents: {},   // por call_control_id de la pierna del agente
     legs: {},     // por call_control_id de la pierna del cliente (outbound e inbound)
     lastSeq: 0,
-    counters: { applied: 0, ignored: 0 },
+    counters: { applied: 0, ignored: 0, dialsFromBurnedLine: 0 },
   };
 }
 
@@ -58,7 +60,11 @@ function advance(leg, status, ev, extra = {}) {
   return { applied: true, reason: 'ok' };
 }
 
-export function reduce(prev, ev) {
+/**
+ * ctx.reputation (Map opcional): reputación de los números salientes. Se inyecta,
+ * no se lee de disco aquí, para que el reducer siga siendo puro y reproducible.
+ */
+export function reduce(prev, ev, ctx = {}) {
   const state = clone(prev);
   let result = { applied: true, reason: 'ok' };
 
@@ -103,6 +109,13 @@ export function reduce(prev, ev) {
       result = advance(leg, 'initiated', ev);
       if (agent && !agent.legIds.includes(leg.id)) agent.legIds.push(leg.id);
       if (agent && result.applied && leg.rank < RANK.ended) agent.currentLegId = leg.id;
+      // Guardia de reputación: si esta llamada salió por una línea ya quemada,
+      // queda marcada para que el dashboard y el dialer dejen de usar esa línea.
+      const rep = agent && ctx.reputation?.get(agent.line);
+      if (result.applied && rep && isBurned(rep)) {
+        leg.reputationFlag = { line: agent.line, ...rep, recommendedLine: recommendLine(ctx.reputation, agent.line) };
+        state.counters.dialsFromBurnedLine += 1;
+      }
       // Si "initiated" llega tarde (pierna ya answered/ended) igual rellenó metadatos.
       if (!result.applied) result.reason = 'late_initiated_metadata_merged';
       break;
