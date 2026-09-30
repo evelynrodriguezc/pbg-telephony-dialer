@@ -17,7 +17,10 @@ const URL = process.env.URL ?? 'http://localhost:3000';
 const DELAY = process.env.DELAY ? Number(process.env.DELAY) : null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const waitEnter = (msg) => new Promise((r) => rl.question(msg, () => r()));
+let stdinClosed = false;
+rl.on('close', () => { stdinClosed = true; });
+// Si no hay teclado (stdin cerrado), no se bloquea: sigue solo.
+const waitEnter = (msg) => new Promise((r) => { if (stdinClosed) { console.log(msg); return r(); } rl.question(msg, () => r()); });
 
 const DESCRIBE = {
   'agent_leg.answered': (e) => `el agente contesta su línea ${e.from}`,
