@@ -1,0 +1,13 @@
+{
+  "name": "telephony-dialer",
+  "version": "0.1.0",
+  "description": "Estado, idempotencia y recuperación para una línea de agente con múltiples clientes (reto PBG)",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "replay": "node scripts/replay.js",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT"
+}
