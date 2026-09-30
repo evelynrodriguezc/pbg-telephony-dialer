@@ -6,6 +6,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node src/server.js",
+    "fresh": "rm -rf runtime && node src/server.js",
     "replay": "node scripts/replay.js",
     "feed": "node scripts/feed.js",
     "test": "node --test test/*.test.js"

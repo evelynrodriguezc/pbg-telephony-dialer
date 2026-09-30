@@ -23,6 +23,7 @@ No es un dialer completo. No hay UI, ni integración real con un proveedor (Twil
 npm test          # 10 pruebas con node:test, sin dependencias
 npm run replay    # procesa el feed del paquete y muestra el estado final
 npm start         # servidor en :3000 (PORT, DATA_DIR, WEBHOOK_SECRET opcionales)
+npm run fresh     # igual pero borrando el estado guardado antes (empieza vacío)
 npm run feed      # en otra terminal: manda el feed al servidor, evento por evento
 ```
 
