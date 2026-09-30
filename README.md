@@ -1,96 +1,66 @@
-# Telephony Dialer: estado, idempotencia y recuperación
+# Telephony Dialer
 
-Reto de Ingeniería PBG (60 minutos). Construí la pieza que considero más crítica de un dialer: **el núcleo que recibe webhooks de telefonía y mantiene un estado correcto** aunque los eventos lleguen duplicados, fuera de orden, o el proceso se reinicie. Sin esto, cualquier UI o marcador encima muestra datos falsos.
+Control de estado para telefonía de agentes: una línea del agente se mantiene activa mientras distintos clientes entran y salen, y nada se pierde aunque los eventos lleguen repetidos, fuera de orden, o el proceso se reinicie.
 
-No es un dialer completo. No hay UI, ni integración real con un proveedor (Twilio/Telnyx), ni cola externa.
+## El problema
+
+Un sistema de llamadas recibe eventos (webhooks) del proveedor de telefonía: el agente contestó, salió una llamada, el cliente contestó, colgó, entró una llamada. Esos eventos llegan por internet y no son confiables: pueden llegar dos veces, en otro orden, o mientras el servidor está caído. Si el sistema se guía por ellos tal cual llegan, termina mostrando llamadas que ya terminaron como activas, agentes ocupados que están libres, y clientes asignados a la persona equivocada.
+
+## La solución
+
+Un núcleo pequeño que hace cuatro cosas:
+
+1. **Separa identidades.** La línea del agente, cada llamada con un cliente, y el cliente como persona son tres cosas distintas. La línea sigue activa aunque los clientes cuelguen. Un cliente no es un número de teléfono: si dos leads comparten número, el sistema no adivina, marca la identidad como ambigua y deja que el agente decida.
+2. **Ignora lo que no avanza.** El estado de una llamada solo puede ir hacia adelante: iniciada, contestada, terminada. Un evento repetido o uno que llega tarde intentando retroceder se ignora. Esa sola regla resuelve duplicados y desorden.
+3. **Guarda antes de procesar.** Cada evento se escribe en disco antes de tocar el estado, con una clave única para descartar repetidos. Al arrancar, el servidor relee el registro y queda exactamente como estaba antes de caerse.
+4. **Cuida la reputación del número.** Antes de marcar, revisa si la línea del agente está marcada como spam o pasó el límite diario. Si es así, no marca y sugiere otra línea limpia.
 
 ## Qué hay
 
 | Archivo | Rol |
 |---|---|
-| `src/state.js` | Reducer puro: `(estado, evento) -> estado`. Aquí vive el modelo y las reglas. |
-| `src/store.js` | Log write-ahead (`events.jsonl`) + dedupe por clave + snapshot + recuperación al arrancar. |
+| `src/state.js` | Las reglas: `(estado, evento) -> estado`. Función pura, sin efectos secundarios. |
+| `src/store.js` | Registro en disco, descarte de repetidos, snapshot y recuperación al arrancar. |
 | `src/server.js` | HTTP sin dependencias: `POST /webhooks`, `POST /dial`, `GET /state`, `GET /health`, `GET /` (vista). Firma HMAC opcional. |
-| `src/ui.html` | Vista en vivo, un solo HTML sin framework: línea del agente arriba, piernas entrando y saliendo abajo, alertas. |
-| `scripts/feed.js` | Envía el feed al servidor por HTTP con pausa entre eventos, para verlo cambiar en la vista. |
-| `src/reputation.js` | Guardia de reputación: decide si se puede marcar desde una línea, sugiere una limpia, marca llamadas que salieron por línea quemada. |
-| `scripts/replay.js` | Alimenta `data/webhooks.jsonl` tal cual llega, simula el reinicio y reenvía todo el feed. |
-| `test/state.test.js` | 10 pruebas: identidades, duplicados, desorden, fallo SIP, inbound durante outbound, lookup ambiguo, recuperación, guardia de reputación. |
+| `src/ui.html` | Vista en vivo: línea del agente arriba, llamadas entrando y saliendo abajo, alertas. |
+| `src/reputation.js` | Decide si se puede marcar desde una línea y sugiere una limpia. |
+| `scripts/feed.js` | Manda el feed de ejemplo al servidor, evento por evento, con Enter. |
+| `scripts/replay.js` | Procesa el feed completo de una vez, simula el reinicio y muestra el estado final. |
+| `test/state.test.js` | 10 pruebas: identidades, duplicados, desorden, fallo SIP, inbound durante outbound, lookup ambiguo, recuperación, reputación. |
+| `data/` | Datos sintéticos de ejemplo: leads, eventos, reputación de números. |
 
 ## Correr
 
 ```bash
-npm test          # 10 pruebas con node:test, sin dependencias
-npm run replay    # procesa el feed del paquete y muestra el estado final
-npm start         # servidor en :3000 (PORT, DATA_DIR, WEBHOOK_SECRET opcionales)
-npm run fresh     # igual pero borrando el estado guardado antes (empieza vacío)
-npm run feed      # en otra terminal: manda el feed al servidor, evento por evento
+npm test          # 10 pruebas, sin dependencias (Node 20+)
+npm run replay    # procesa el feed de ejemplo y muestra el estado final
+npm run fresh     # servidor en :3000 empezando vacío
+npm run feed      # en otra terminal: manda el feed, un evento por Enter
 ```
 
-Con `npm start` y `npm run feed` corriendo, abre http://localhost:3000 y verás la línea del agente mantenerse activa mientras los clientes entran y salen. Cuando el feed llega a `process.restart` hace una pausa: mata el servidor y vuelve a levantarlo; el estado vuelve igual.
+Abre http://localhost:3000 para ver el estado en vivo. Cuando el feed llegue al reinicio, mata el servidor y vuelve a correr `npm start`: el estado vuelve igual.
 
-Ejemplo contra el servidor:
-
-```bash
-curl -X POST localhost:3000/webhooks -H 'content-type: application/json' \
-  -d '{"seq":1,"ts":"13:00:00.100Z","event":"agent_leg.answered","call_control_id":"A-1","from":"+15550000001"}'
-curl localhost:3000/state
-```
-
-Si matas el proceso y lo vuelves a levantar con el mismo `DATA_DIR`, el estado vuelve igual (se ve en el log de arranque: `[boot] recovered {...}`).
+Variables opcionales: `PORT`, `DATA_DIR`, `WEBHOOK_SECRET` (si se define, `x-signature` debe ser HMAC-SHA256 del cuerpo).
 
 ## Modelo de estado
 
-Vocabulario: en telefonía una llamada entre agente y cliente son dos **legs** (piernas o tramos) que el proveedor une: uno hacia el agente y otro hacia el cliente. El feed del paquete usa `agent_leg` y `client_leg`. Aquí "pierna" = leg.
+- **Agente** (`agents[A-*]`): la línea del agente. Número saliente, estado `active/ended`, con quién habla ahora (`currentLegId`) y el historial de llamadas.
+- **Llamada** (`legs[C-*]` o `legs[I-*]`): una llamada concreta, outbound o inbound. Tiene `status` y un `rank` (`initiated/ringing=1, answered=2, ended=3`) que solo sube.
+- **Cliente** (`clientId`): el lead. Nunca se asigna automáticamente cuando hay más de un candidato para un número.
 
-Tres identidades separadas, nunca mezcladas:
+En telefonía cada tramo de una llamada se llama *leg*; en el código se usa ese nombre.
 
-- **Agente** (`agents[A-*]`): la línea del agente. Tiene su número saliente (`line`), estado `active/ended`, la pierna con la que está hablando ahora (`currentLegId`) y el historial de piernas. Sigue `active` aunque los clientes cuelguen.
-- **Pierna** (`legs[C-*]` o `legs[I-*]`): una llamada concreta, outbound o inbound. Tiene `status` y un `rank` numérico (`initiated/ringing=1, answered=2, ended=3`), más `agentId` y `clientId`.
-- **Cliente** (`clientId`): el lead. Un lead **no es un número**. En el paquete, L201 y L202 comparten teléfono, así que una inbound desde ese número queda con `identity.status = "ambiguous"` y candidatos, sin asignar lead. Lo decide el agente o una regla de negocio, no el sistema a ciegas.
+## Cómo se comporta con el feed de ejemplo
 
-## Cómo se resuelve cada problema del enunciado
+`data/webhooks.jsonl` trae los casos difíciles a propósito:
 
-**Duplicados.** Dos capas. (1) Clave de idempotencia por evento: id del proveedor si lo trae, si no `seq`, si no una huella de contenido. Si se vio, se descarta antes de tocar nada. (2) El reducer es monótono: un `answered` sobre una pierna ya `answered` no hace nada. Esto atrapa el duplicado semántico del feed (seq 3 llega con otro id pero es el mismo `answered` que seq 4).
+- El evento 4 llega antes que el 3, y el 3 es un repetido: se ignora.
+- Reinicio con snapshot viejo: se recupera desde disco y el estado queda idéntico.
+- Fallo SIP 603: la llamada se cierra y el agente queda libre.
+- Entra una llamada mientras la línea sigue activa: si el agente está ocupado se encola, si está libre se ofrece.
+- El número entrante pertenece a dos leads: identidad ambigua, no se asigna.
+- La línea del agente está marcada spam con 86 llamadas en 24h: alerta y línea recomendada.
 
-**Fuera de orden.** El `rank` solo sube. `hangup` antes de `answered` deja la pierna en `ended` y el `answered` tardío se ignora. `answered` antes de `initiated` crea la pierna como `orphan` y el `initiated` tardío rellena metadatos (cliente, número) sin bajar el estado. No dependo de que el proveedor ordene nada.
+## Herramientas
 
-**Reinicio.** Cada evento se escribe en `events.jsonl` **antes** de procesarse (write-ahead). Cada N eventos se guarda `snapshot.json` de forma atómica (tmp + rename). Al arrancar: cargar snapshot, re-aplicar del log solo lo posterior. Como el reducer es determinista, el estado queda idéntico. En el replay, `process.restart` con `snapshot_age_seconds: 1.7` termina en `recovered fromSnapshot=true replayed=2 stateIdentical=true`.
-
-**Inbound durante outbound.** Si la línea del agente tiene `currentLegId`, la inbound queda `disposition: "queued"`; si está libre, `"offered"`. No se pisa la conversación en curso. En el feed, I-201 entra justo después de que C-102 falló con SIP 603, así que el agente estaba libre y se ofrece.
-
-**Fallo SIP.** `sip.failure` cierra la pierna con `endReason: "sip_603"` y libera al agente igual que un hangup.
-
-**Reputación del número (por qué la gente no contesta).** La línea del agente (+15550000001) aparece como `spam_likely` con 86 llamadas en 24h. Eso lo deciden las operadoras y apps como Hiya; el código no lo puede "desmarcar". Lo que sí puede es dejar de empeorarlo:
-
-- `POST /dial { agentId, to }` decide **antes** de marcar. Si la línea está etiquetada spam, pasó el límite diario (`DAILY_LIMIT = 50`) o tiene quejas, responde 422 con `recommendedLine` (la línea limpia con menos volumen, aquí +15550000002). Si no hay línea limpia, no marca: seguir quemando el pool es peor.
-- Si igual llegó un `client_leg.initiated` por una línea quemada, la pierna queda con `reputationFlag` y sube el contador `dialsFromBurnedLine`. En el replay, C-101 y C-102 salen marcadas.
-- `GET /state` devuelve `warnings` por línea con la recomendación.
-
-Lo que falta y no es código: atestación STIR/SHAKEN A con el proveedor, registrar los números en Free Caller Registry, Branded Caller ID, y respetar ventana horaria y consentimiento (TCPA, DNC). Y no hacer "number cycling": rotar números en masa es el patrón de estafador y quema el pool completo.
-
-## Supuestos
-
-- Una sola línea de agente activa a la vez en la demo. Los eventos del paquete no traen a qué agente pertenece cada pierna; en producción eso viene en `client_state` (Telnyx) o en un mapeo propio por `CallSid` (Twilio).
-- `seq` hace de id de evento. Los proveedores reales dan un id; el store lo usa si existe.
-- El log es un archivo JSONL. Es el mismo patrón que con Postgres (tabla `events` con índice único por clave) o Redis `SETNX`, solo que sin infraestructura para 60 minutos.
-- El set de claves vistas crece sin límite. En producción: TTL o índice único en base de datos.
-
-## Qué podría romperse mañana en producción
-
-- Concurrencia: con dos instancias del servidor el archivo y el `Set` en memoria dejan de ser una fuente única. Hace falta base de datos con índice único por clave de idempotencia y un lock por `call_control_id`.
-- Sin firma configurada acepta cualquier POST. En producción `WEBHOOK_SECRET` es obligatorio.
-- No hay detección de silencio: una pierna `answered` sin `hangup` durante 4 horas debería reconciliarse consultando la API del proveedor.
-- El snapshot guarda todas las claves vistas; a millones de eventos hay que podar.
-
-## Con una semana más
-
-1. Postgres + tabla `events` (clave única) + `outbox`, y una cola (SQS o BullMQ) para responder 200 y procesar aparte.
-2. Reconciliación periódica contra la API del proveedor para piernas colgadas y eventos que nunca llegaron.
-3. Enrutamiento real de inbound: cola por agente, timeout, voicemail, y UI para resolver identidades ambiguas.
-4. Múltiples agentes y afinidad pierna-agente explícita.
-5. Métricas: eventos ignorados por razón, latencia de webhook, piernas huérfanas.
-
-## Uso de IA
-
-Construido con Claude Code. Yo decidí el alcance (núcleo de estado antes que UI), revisé cada regla del reducer y las pruebas cubren los casos del paquete.
+Node 24, sin dependencias. Desarrollado con apoyo de IA como asistente de programación; el alcance, las decisiones de diseño, la revisión y las pruebas son mías.

@@ -1,8 +1,8 @@
 /**
  * HTTP mínimo (sin dependencias).
  *   POST /webhooks  -> valida, persiste, responde 200 rápido. Body: evento JSON.
- *   GET  /          -> vista HTML del estado (línea del agente + piernas).
- *   GET  /state     -> estado completo (agentes, piernas, contadores, advertencias).
+ *   GET  /          -> vista HTML del estado (línea del agente + llamadas).
+ *   GET  /state     -> estado completo (agentes, llamadas, contadores, advertencias).
  *   GET  /health    -> ok + lastSeq.
  *   POST /dial      -> { agentId, to }: decide si se puede marcar desde la línea
  *                      del agente según reputación. Devuelve línea recomendada

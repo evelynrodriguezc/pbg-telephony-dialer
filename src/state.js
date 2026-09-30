@@ -4,8 +4,8 @@
  * Reglas:
  *  - Determinista y sin efectos secundarios: el mismo log de eventos siempre
  *    produce el mismo estado. Eso es lo que hace posible recuperar tras un reinicio.
- *  - Cada pierna (leg) tiene un rango de progreso. Un evento que intenta mover
- *    la pierna hacia atrás (p. ej. "answered" después de "hangup") se ignora.
+ *  - Cada llamada (leg) tiene un rango de progreso. Un evento que intenta mover
+ *    la llamada hacia atrás (p. ej. "answered" después de "hangup") se ignora.
  *    Eso absorbe duplicados semánticos y eventos fuera de orden.
  *  - Tres identidades separadas:
  *      agent   -> la línea del agente (call_control_id "A-*", número saliente)
@@ -20,8 +20,8 @@ export const RANK = { initiated: 1, ringing: 1, answered: 2, ended: 3 };
 
 export function initialState() {
   return {
-    agents: {},   // por call_control_id de la pierna del agente
-    legs: {},     // por call_control_id de la pierna del cliente (outbound e inbound)
+    agents: {},   // por call_control_id de la llamada del agente
+    legs: {},     // por call_control_id de la llamada del cliente (outbound e inbound)
     lastSeq: 0,
     counters: { applied: 0, ignored: 0, dialsFromBurnedLine: 0 },
   };
@@ -47,7 +47,7 @@ function ensureLeg(state, id, patch) {
   return state.legs[id];
 }
 
-/** Sube el estado de la pierna solo si el nuevo rango es mayor. */
+/** Sube el estado de la llamada solo si el nuevo rango es mayor. */
 function advance(leg, status, ev, extra = {}) {
   const rank = RANK[status];
   if (rank <= leg.rank) {
@@ -116,7 +116,7 @@ export function reduce(prev, ev, ctx = {}) {
         leg.reputationFlag = { line: agent.line, ...rep, recommendedLine: recommendLine(ctx.reputation, agent.line) };
         state.counters.dialsFromBurnedLine += 1;
       }
-      // Si "initiated" llega tarde (pierna ya answered/ended) igual rellenó metadatos.
+      // Si "initiated" llega tarde (llamada ya answered/ended) igual rellenó metadatos.
       if (!result.applied) result.reason = 'late_initiated_metadata_merged';
       break;
     }

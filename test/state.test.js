@@ -29,7 +29,7 @@ test('duplicado semántico (mismo answered dos veces) no altera el estado', () =
   assert.equal(s2.legs['C-1'].history.length, s1.legs['C-1'].history.length);
 });
 
-test('fuera de orden: hangup antes de answered deja la pierna terminada', () => {
+test('fuera de orden: hangup antes de answered deja la llamada terminada', () => {
   const s = run([agentUp, c1Init, c1Hang, c1Ans]);
   assert.equal(s.legs['C-1'].status, 'ended');
   assert.equal(s.agents['A-1'].currentLegId, null);
@@ -99,7 +99,7 @@ test('guardia de reputación: no marcar desde línea quemada y sugerir la limpia
   assert.equal(limit.recommendedLine, null);
 });
 
-test('una llamada que salió por línea quemada queda marcada en la pierna', () => {
+test('una llamada que salió por línea quemada queda marcada en la llamada', () => {
   const s = [agentUp, c1Init].reduce((st, ev) => reduce(st, ev, { reputation }).state, initialState());
   assert.equal(s.legs['C-1'].reputationFlag.label, 'spam_likely');
   assert.equal(s.legs['C-1'].reputationFlag.recommendedLine, '+15550000002');
